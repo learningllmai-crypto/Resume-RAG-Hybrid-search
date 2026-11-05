@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<!-- Load the local styles, icon and deferred browser client. -->
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8faf8">
+  <title>Resume Desk — Your resume workspace</title>
+  <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css?v=2">
+  <script src="/static/app.js?v=2" defer></script>
+</head>
+<body>
+<svg class="sprite" aria-hidden="true"><defs>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 11.5a8 8 0 0 1-8 8H4l1.5-4A8 8 0 1 1 20 11.5Z"/></symbol>
+<symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Zm0 0v6h6M8 13h8M8 17h6"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l4-1L20 7a2 2 0 0 0-5-5L3 14Z"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.7 6.3L21 12l-6.3 2.7L12 21l-2.7-6.3L3 12l6.3-2.7Z"/></symbol>
+<symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m8 13 7-7a3 3 0 0 1 4 4L9 20a5 5 0 0 1-7-7L13 2m-8 14L16 5"/></symbol>
+</defs></svg>
+<div class="shell">
+  <!-- Keep saved conversations and navigation together in the sidebar. -->
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="/" aria-label="Resume Desk home"><span class="brand-mark"><svg><use href="#i-doc"/></svg></span><span>Resume Desk<span class="brand-sub">YOUR TALENT WORKSPACE</span></span></a>
+    <button id="newChat" class="new-chat"><svg><use href="#i-plus"/></svg>New conversation<span class="key">＋</span></button>
+    <div class="sidebar-label">CONVERSATIONS</div>
+    <nav id="chatList" class="chat-list" aria-label="Saved conversations"><p class="muted loading-text">Loading your conversations…</p></nav>
+    <div class="sidebar-bottom">
+      <button id="sidebarLibrary" class="library-nav"><span class="nav-icon"><svg><use href="#i-doc"/></svg></span><span>Resume library<small id="sidebarCount">Connecting…</small></span><span class="nav-chevron">↗</span></button>
+      <div class="workspace-footer"><span class="workspace-avatar">W</span><div>Local workspace<small>Saved on this computer</small></div><span class="privacy-dot" title="Local workspace"></span></div>
+    </div>
+  </aside>
+  <div class="sidebar-scrim" id="sidebarScrim"></div>
+  <!-- Show the selected conversation, service status and message composer. -->
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left"><button id="menuButton" class="icon-btn mobile-only" aria-label="Open conversations"><svg><use href="#i-menu"/></svg></button><span id="chatTitle">Workspace chat</span><span class="beta-badge">RESUME ASSISTANT</span></div>
+      <div class="topbar-actions"><span id="serviceStatus" class="service-status"><i></i>Connecting</span><button id="openLibrary" class="button secondary"><svg><use href="#i-doc"/></svg><span>Resume library</span><span id="headerCount" class="count-badge">—</span></button></div>
+    </header>
+    <section id="serviceNotice" class="service-notice" hidden></section>
+    <div id="conversation" class="conversation" aria-live="polite" aria-relevant="additions">
+      <section id="welcome" class="welcome">
+        <div class="welcome-symbol"><svg><use href="#i-spark"/></svg></div>
+        <div class="eyebrow">A CLEARER VIEW OF YOUR CANDIDATES</div>
+        <h1>Great people.<br><span>Better conversations.</span></h1>
+        <p>Search experience, explore projects, and find the evidence<br class="desktop-break"> behind every resume. Just ask.</p>
+        <div class="suggestions">
+          <button class="suggestion" data-prompt="Find Python and Docker developers in Mumbai"><span class="suggestion-icon"><svg><use href="#i-search"/></svg></span><strong>Find the right skills</strong><span>Python and Docker developers in Mumbai</span><b>↗</b></button>
+          <button class="suggestion" data-prompt="Which candidates have built projects in Artificial Intelligence?"><span class="suggestion-icon"><svg><use href="#i-spark"/></svg></span><strong>Explore their work</strong><span>Candidates with AI project experience</span><b>↗</b></button>
+          <button class="suggestion" data-prompt="How many candidates know Java and REST API?"><span class="suggestion-icon"><svg><use href="#i-doc"/></svg></span><strong>Know your talent pool</strong><span>Count Java and REST API candidates</span><b>↗</b></button>
+        </div>
+        <div class="welcome-library"><span class="tiny-dot"></span><span id="welcomeCount">Your resume library is connecting</span><button id="welcomeUpload">Add resumes <span>↗</span></button></div>
+      </section>
+      <section id="messages" class="messages" aria-label="Conversation messages"></section>
+    </div>
+    <footer class="composer-area">
+      <!-- Capture the next question and route file selection to the upload control. -->
+      <form id="composer" class="composer"><textarea id="question" rows="1" maxlength="8000" aria-label="Your question" placeholder="Ask about your resumes…"></textarea><div class="composer-bottom"><button type="button" id="attachButton" class="attach-button" title="Upload PDF resumes"><svg><use href="#i-paperclip"/></svg><span>Add resumes</span></button><div class="composer-send"><span id="composerHint">Enter to send</span><button id="sendButton" class="send-button" type="submit" aria-label="Send message" disabled><svg><use href="#i-arrow"/></svg></button></div></div></form>
+      <p class="composer-note">Grounded in your resumes. Check the cited evidence before making a decision.</p>
+    </footer>
+  </main>
+</div>
+<!-- Separate new PDF uploads from replacements of the selected resume. -->
+<input type="file" id="uploadInput" accept=".pdf,application/pdf" multiple hidden>
+<input type="file" id="replaceInput" accept=".pdf,application/pdf" hidden>
+<!-- Browse, upload and edit resumes without leaving the current conversation. -->
+<dialog id="libraryDialog" class="library-dialog">
+  <header class="dialog-header"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>Resume library <span id="libraryTotal" class="count-badge">—</span></h2><p>View, update, and add the resumes your assistant can search.</p></div><button id="closeLibrary" class="icon-btn" aria-label="Close resume library"><svg><use href="#i-close"/></svg></button></header>
+  <div class="library-toolbar"><label class="search-field"><svg><use href="#i-search"/></svg><input id="resumeSearch" placeholder="Search name, skills, or location…" aria-label="Search resumes"></label><button id="libraryUpload" class="button primary"><svg><use href="#i-upload"/></svg>Upload PDFs</button></div>
+  <div id="uploadJobs" class="upload-jobs" aria-live="polite"></div>
+  <div class="library-body"><div class="resume-list-panel"><div id="resumeList" class="resume-list"></div><button id="loadMore" class="load-more" hidden>Load more resumes</button></div><section id="resumeDetail" class="resume-detail"><div class="detail-empty"><span class="empty-doc"><svg><use href="#i-doc"/></svg></span><h3>A closer look</h3><p>Choose a resume to read its full text,<br>edit it, or replace the PDF.</p></div></section></div>
+  <footer class="library-footer"><span><i class="tiny-dot"></i>Saved resumes are available in your next chat request.</span><span id="uploadLimit">PDF files · up to 15 MB each</span></footer>
+</dialog>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+</body>
+</html>
