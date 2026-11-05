@@ -1,0 +1,24 @@
+# Run PostgreSQL locally with a persistent volume and a readiness check.
+services:
+  postgres:
+    build: .
+    image: resume-rag-postgres:local
+    container_name: resume-rag-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+    ports:
+      - "127.0.0.1:${PGPORT:-5437}:5432"
+    volumes:
+      - resume_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  resume_pg_data:
