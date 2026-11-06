@@ -95,6 +95,7 @@ def project_clauses(question):
 def normalize_question(question):
     """Correct common input typos before interpreting constraints; preserve skill names."""
     for pattern, replacement in [
+        (r'\bfast[ \t]+api\b', 'FastAPI'),
         (r'\batleast\b', 'at least'), (r'\batmost\b', 'at most'),
         (r'\b(?:ecperience|experiance|expereince|experince|expirence)\b', 'experience'),
         (r'\brésumés\b', 'resumes'), (r'\brésumé\b', 'resume'),
@@ -539,6 +540,8 @@ class ResumeEngine:
             plan['intent'] = 'compare'
         elif by_experience or re.search(r'\b(best|top|strongest|rank|shortlist)\b', q, re.I):
             plan['intent'] = 'rank'
+        elif re.match(r'\s*filter\s+out\b', q, re.I):
+            plan['intent'] = 'find'
         elif project_question and re.search(r'\bcandidates?\b', criteria_question, re.I):
             # If a project question also says who qualifies, check those rules before looking for the project.
             plan['intent'] = 'find'
@@ -641,6 +644,7 @@ class ResumeEngine:
                 if re.search(pattern, question, re.I):
                     plan['unsupported'].append(label)
         occurrences.sort()
+        exclude_matches = bool(re.match(r'\s*filter\s+out\b', question, re.I))
         required = []
         for i, (start, end, term) in enumerate(occurrences):
             before = question[occurrences[i-1][1] if i else 0:start].casefold()
@@ -654,7 +658,7 @@ class ResumeEngine:
                     skill_mentions(t, term) for t in extra.excluded_skills)
                 optional = bool(re.search(r'\b(preferred|preferably|optional|ideally|nice[- ]to[- ]have)\b', question, re.I)) and any(
                     skill_mentions(t, term) for t in extra.preferred_skills)
-            if negative:
+            if negative or exclude_matches:
                 plan['excluded_skills'].append(term)
             elif optional:
                 plan['preferred_skills'].append(term)
@@ -741,7 +745,13 @@ class ResumeEngine:
             elif partial:
                 clarification='That name is ambiguous: '+', '.join(
                     f"{self.parents[c]['metadata']['candidate_name']} ({c})" for c in partial)
-        apply_criteria = plan['intent'] in ('count','find','rank') or bool(re.match(r'\s*(only|filter|narrow)\b', q,re.I))
+        # A follow-up asking which people have a named skill narrows the previous results.
+        skill_followup = (plan['intent'] == 'details' and plan['reference'] != 'new'
+                          and bool(re.match(r'\s*(?:which\s+(?:of|candidates?)|who)\b', q, re.I))
+                          and not re.search(r'\bprojects?\b', q, re.I)
+                          and any(skill_mentions(q, skill) for skill in self.skills))
+        apply_criteria = (plan['intent'] in ('count','find','rank') or skill_followup
+                          or bool(re.match(r'\s*(only|filter|narrow)\b', q,re.I)))
         extra = ExtraCriteria(skills=plan['skills'],excluded_skills=plan['excluded_skills'],
             preferred_skills=plan['preferred_skills'],locations=plan['locations'],unsupported=[])
         # Use the candidate clause for hard rules like city and years. Keep the project words for finding the evidence.
@@ -1046,7 +1056,9 @@ class ResumeEngine:
             order={c:i for i,c in enumerate(s['eligible'])}
             ranking.sort(key=lambda r:order[r['candidate_id']])
         # Apply the display limit only after ranking the complete eligible pool.
-        limit=None if plan['intent'] in ('details','compare') and plan['reference']!='new' else plan['display_limit']
+        unrestricted_followup = (plan['intent'] in ('details','compare') and plan['reference']!='new'
+                                   and not s['filters']['skill_groups'])
+        limit = None if unrestricted_followup else plan['display_limit']
         selected=[r['candidate_id'] for r in (ranking if limit is None else ranking[:limit])]
         audit.update(displayed_candidates=len(selected),ranked_candidates=len(ranking),display_limit=limit,
                      ranking_basis=plan['ranking'],retrieval_seconds=round(time.monotonic()-started,3))
@@ -1352,6 +1364,23 @@ def self_test():
     follow.update(e._retrieve(follow));follow.update(e._evidence(follow));follow.update(e._respond(follow))
     assert follow['candidate_ids']==memory['displayed_ids'] and 'AI Assistant' in follow['answer']
     assert all(p['section']=='projects' for p in follow['sources'])
+    # Skill follow-ups filter the previous pool, even when the planner returns no skills.
+    e.skills.add('FastAPI')
+    original_skills = e.skill_text['RESUME_0002']
+    e.skill_text['RESUME_0002'] += ' FastAPI'
+    cohort = blank_memory()
+    cohort['displayed_ids'] = cohort['eligible_ids'] = ['RESUME_0001', 'RESUME_0002']
+    for question, expected, field in [
+        ('Which of those candidates have knowledge in Fast API?', 'RESUME_0002', 'skill_groups'),
+        ('Filter out the candidates with fast api knowledge.', 'RESUME_0001', 'excluded_skills'),
+    ]:
+        narrowed = {**base, 'question': normalize_question(question), 'memory': cohort}
+        narrowed.update(e._plan(narrowed))
+        narrowed.update(e._filter(narrowed))
+        assert narrowed['eligible'] == [expected]
+        assert narrowed['filters'][field] == ([['FastAPI']] if field == 'skill_groups' else ['FastAPI'])
+    e.skill_text['RESUME_0002'] = original_skills
+    e.skills.remove('FastAPI')
     count={**base,'question':'how many candidates have more than 5 years of expirence?'}
     count.update(e._plan(count));count.update(e._filter(count));count.update(e._count(count))
     assert count['count_result']['confirmed']==1 and count['count_result']['uncertain']==256
