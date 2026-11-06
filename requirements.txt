@@ -1,5 +1,6 @@
 langchain-core==1.7.3
 langchain-ollama==1.1.0
+langchain-openai==1.7.3
 langchain-text-splitters==1.1.3
 langgraph==1.2.18
 pgvector==0.4.2

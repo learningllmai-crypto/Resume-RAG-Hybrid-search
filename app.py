@@ -33,9 +33,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from ingest_resumes import (BASE, COLLECTION, CHAT_MODEL, EMBED_MODEL, OLLAMA_URL,
+from openai import APIError
+from ingest_resumes import (BASE, COLLECTION, CHAT_PROVIDER, CHAT_MODEL, CHAT_API_BASE_URL, EMBED_MODEL, OLLAMA_URL,
     RECIPE, client, embed_chunks, ensure_schema, load_manifest, prepare_resume, rebuild_bm25, save_resume_records)
-from resume_engine import ResumeEngine, profile_fields
+from resume_engine import ResumeEngine, chat_api_key, profile_fields
 
 log = logging.getLogger('resume-desk')
 MAX_BYTES = int(os.getenv('RESUME_UPLOAD_MAX_MB', '15')) * 1024 * 1024
@@ -258,7 +259,10 @@ class Workspace:
                     else:
                         self.run_resume(job)
                 except Exception as exc:
-                    log.exception('Job %s failed', job['id'])
+                    if isinstance(exc, APIError):
+                        log.warning('Job %s failed at the chat API (%s)', job['id'], type(exc).__name__)
+                    else:
+                        log.exception('Job %s failed', job['id'])
                     # Hold this job until its failure can be recorded after a database outage.
                     while not self.stop_event.is_set():
                         try:
@@ -273,7 +277,9 @@ class Workspace:
     # Record the job error and mark its pending assistant message failed when applicable.
     def fail(self, job, exc):
         error = exc.detail if isinstance(exc, HTTPException) else str(exc)
-        if isinstance(exc, (psycopg.Error, ConnectionError, httpx.HTTPError)):
+        if isinstance(exc, APIError):
+            error = 'Chat API request failed. Check the model, API key, available credits and endpoint in .env.'
+        elif isinstance(exc, (psycopg.Error, ConnectionError, httpx.HTTPError)):
             error = 'A local service is unavailable. Check Docker and Ollama, then retry.'
         error = str(error)[:1000]
         with client() as db, db.transaction():
@@ -403,7 +409,7 @@ class Workspace:
     # Return only the job fields that the browser needs to display status and results.
     def public_job(self,row):
         return {k:row[k] for k in ('id','kind','status','stage','message','result','error','retryable','created_at','updated_at')}
-    # Cache brief PostgreSQL and Ollama checks for the status indicator.
+    # Cache checks for PostgreSQL, local embeddings and the selected chat provider.
     def health(self):
         cached_at,cached=self.health_cache
         if cached and time.monotonic()-cached_at<5:
@@ -421,8 +427,17 @@ class Workspace:
             model=CHAT_MODEL in names or CHAT_MODEL+':latest' in names
             embedding=EMBED_MODEL in names or EMBED_MODEL+':latest' in names
         except Exception:pass
+        if CHAT_PROVIDER == 'openai':
+            try:
+                response = httpx.get(CHAT_API_BASE_URL + '/models',
+                                     headers={'Authorization': 'Bearer ' + chat_api_key()}, timeout=2)
+                response.raise_for_status()
+                model = any(item.get('id') == CHAT_MODEL for item in response.json()['data'])
+            except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+                model = False
         result={'database':database,'model':model,'embedding':embedding,'ready':ready,
-                'resume_count':count,'model_name':CHAT_MODEL,'max_upload_mb':MAX_BYTES//1024//1024}
+                'resume_count':count,'model_name':CHAT_MODEL,'chat_provider':CHAT_PROVIDER,
+                'embedding_model':EMBED_MODEL,'max_upload_mb':MAX_BYTES//1024//1024}
         self.health_cache=(time.monotonic(),result)
         return result
 
@@ -555,7 +570,7 @@ def create_app(*,data_dir=None,resume_dir=None):
                        (user_id,chat_id,question,payload.client_id))
             db.execute("INSERT INTO rag_web_messages(id,chat_id,role,status,created_at) VALUES(%s,%s,'assistant','pending',clock_timestamp())",(assistant_id,chat_id))
             spec={'chat_id':chat_id,'question':question,'assistant_id':assistant_id,'user_message_id':user_id}
-            db.execute("INSERT INTO rag_web_jobs(id,dataset,owner,kind,spec,message) VALUES(%s,%s,%s,'chat',%s,'Waiting for the local model')",
+            db.execute("INSERT INTO rag_web_jobs(id,dataset,owner,kind,spec,message) VALUES(%s,%s,%s,'chat',%s,'Waiting for the chat model')",
                        (job_id,COLLECTION,owner,Jsonb(spec)))
             db.execute('UPDATE rag_web_chats SET title=%s,updated_at=now() WHERE id=%s',
                        (question[:72] if row['title']=='New conversation' else row['title'],chat_id))

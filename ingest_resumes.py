@@ -9,6 +9,7 @@ import json
 import os
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import psycopg
 from psycopg.conninfo import make_conninfo
@@ -44,7 +45,18 @@ os.environ.setdefault('TIKTOKEN_CACHE_DIR', str(BASE / '.cache' / 'tiktoken'))
 COLLECTION = os.getenv('RESUME_COLLECTION', 'resume_rag_v1')
 OLLAMA_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
 EMBED_MODEL = os.getenv('EMBED_MODEL', 'nomic-embed-text')
-CHAT_MODEL = os.getenv('CHAT_MODEL', 'llama3.2:3b')
+CHAT_PROVIDER = os.getenv('CHAT_PROVIDER', 'ollama').strip().lower()
+if CHAT_PROVIDER not in ('ollama', 'openai'):
+    raise ValueError('Set CHAT_PROVIDER to ollama or openai in .env.')
+CHAT_MODEL = os.getenv('CHAT_MODEL', 'llama3.2:3b' if CHAT_PROVIDER == 'ollama' else 'gpt-4.1-mini').strip()
+if not CHAT_MODEL:
+    raise ValueError('Set CHAT_MODEL to a model name in .env.')
+CHAT_API_BASE_URL = os.getenv('CHAT_API_BASE_URL', 'https://api.openai.com/v1').strip().rstrip('/')
+if CHAT_PROVIDER == 'openai':
+    endpoint = urlsplit(CHAT_API_BASE_URL)
+    if (endpoint.scheme not in ('http', 'https') or not endpoint.hostname
+            or endpoint.username is not None or endpoint.query or endpoint.fragment):
+        raise ValueError('Set CHAT_API_BASE_URL to the provider’s HTTP(S) API base URL, without credentials.')
 # Retain the historical recipe tag so the existing dense index passes compatibility checks.
 RECIPE = {'schema': 2, 'backend': 'postgres-pgvector', 'embedding': EMBED_MODEL,
           'lexical': 'postgres-english-ts_rank_cd-or-v1', 'technical_normalization': 1,

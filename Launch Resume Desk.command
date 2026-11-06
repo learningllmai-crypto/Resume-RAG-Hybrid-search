@@ -52,7 +52,14 @@ import time
 from pathlib import Path
 
 import httpx
-from ingest_resumes import BASE, CHAT_MODEL, EMBED_MODEL, OLLAMA_URL, client, load_manifest
+from ingest_resumes import BASE, CHAT_PROVIDER, CHAT_MODEL, EMBED_MODEL, OLLAMA_URL, client, load_manifest
+from resume_engine import chat_api_key
+
+if CHAT_PROVIDER == 'openai':
+    try:
+        chat_api_key()
+    except ValueError as error:
+        raise SystemExit(str(error)) from None
 
 with httpx.Client(base_url=OLLAMA_URL, timeout=2) as http:
     for attempt in range(31):
@@ -69,7 +76,8 @@ with httpx.Client(base_url=OLLAMA_URL, timeout=2) as http:
                 print('Waiting for Ollama…')
             time.sleep(1)
 
-for model in dict.fromkeys((CHAT_MODEL, EMBED_MODEL)):
+ollama_models = (CHAT_MODEL, EMBED_MODEL) if CHAT_PROVIDER == 'ollama' else (EMBED_MODEL,)
+for model in dict.fromkeys(ollama_models):
     if model not in installed and model + ':latest' not in installed:
         ollama = shutil.which('ollama') or '/Applications/Ollama.app/Contents/Resources/ollama'
         if not Path(ollama).is_file():
@@ -85,8 +93,11 @@ if (not manifest or not manifest['ready']) and any(
 ):
     print('Indexing the bundled resumes…')
     subprocess.run([sys.executable, 'ingest_resumes.py', '--folder', str(resume_dir)], check=True)
+
+# Use the same port for the browser and the server, including settings read from .env.
+port = int(os.getenv('CHAT_PORT', '8000'))
+url = f'http://127.0.0.1:{port}'
+print(f'Resume Desk: {url} — press Control-C to stop.')
+subprocess.Popen(['sh', '-c', 'sleep 3; open "$1"', 'resume-desk', url])
+os.execv(sys.executable, [sys.executable, 'app.py'])
 PY
-echo 'Resume Desk: http://127.0.0.1:8000 — press Control-C to stop.'
-# Open the browser after startup and replace this shell with the FastAPI process.
-(sleep 3; open 'http://127.0.0.1:8000') &
-exec .venv/bin/python app.py
