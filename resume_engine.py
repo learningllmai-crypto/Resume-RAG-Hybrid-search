@@ -531,6 +531,10 @@ class ResumeEngine:
         job_evidence = bool(re.search(r'\b(?:which|what)\s+(?:company|employer|job)\b', q, re.I))
         if s['count_terms'] is not None or re.search(r'\b(how many|count|number of)\b', q, re.I):
             plan['intent'] = 'count'
+            # Count the whole previous match set unless the question specifies displayed rows.
+            if (plan['reference'] == 'results' and re.search(r'\b(those|these|them)\b', q, re.I)
+                    and not re.search(r'\b(shown|displayed|listed|visible|first|second|third|fourth|fifth)\b', q, re.I)):
+                plan['reference'] = 'eligible'
         elif resume_request(q):
             plan['intent'] = 'resume'
         elif job_evidence:
@@ -1405,6 +1409,15 @@ def self_test():
     narrowed.update(e._plan(narrowed))
     narrowed.update(e._filter(narrowed))
     assert narrowed['eligible'] == ['RESUME_0002']
+    cohort['displayed_ids'] = ['RESUME_0001']
+    for question, expected in (
+        ('How many of those are in Pune?', ['RESUME_0002']),
+        ('How many of those shown are in Pune?', []),
+    ):
+        counted = {**base, 'question': question, 'memory': cohort}
+        counted.update(e._plan(counted))
+        counted.update(e._filter(counted))
+        assert counted['eligible'] == expected
     e.fields['RESUME_0002']['location'] = previous_location
     e.locations.remove('Pune, Maharashtra')
     delhi_labels = ['Delhi NCR', 'New Delhi, Delhi, India']
