@@ -677,7 +677,20 @@ class ResumeEngine:
                 plan['unsupported'].append('Mixed AND/OR skills need parentheses, e.g. Python and (Java or Docker).')
             if re.search(r'\([^)]*\band\b[^)]*\)\s*or\b', question, re.I):
                 plan['unsupported'].append('Use AND between groups and OR inside groups, e.g. Python and (Java or Docker).')
+        # Match specific Delhi names first so their embedded "Delhi" does not widen the search.
+        delhi_scopes = {
+            match.group(1).casefold()
+            for match in re.finditer(
+                r'\b(New Delhi|Delhi NCR|Delhi)\b(?:\s*,\s*Delhi\b(?!\s+NCR\b))?', question, re.I
+            )
+        }
+        delhi_labels = {'delhi', 'new delhi', 'delhi ncr'}
         for location in self.locations:
+            city = location.split(',', 1)[0].strip().casefold()
+            if city in delhi_labels:
+                if city in delhi_scopes or 'delhi' in delhi_scopes:
+                    plan['locations'].append(location)
+                continue
             variants = [location, *[x.strip() for x in location.split(',')]]
             if location.startswith('Bengaluru'):
                 variants.append('Bangalore')
@@ -685,6 +698,8 @@ class ResumeEngine:
                 plan['locations'].append(location)
         if extra:
             for location in extra.locations:
+                if location.split(',', 1)[0].strip().casefold() in delhi_labels:
+                    continue
                 location_context = re.search(r'\b(?:in|from|based in|located in)\s+' + re.escape(location) + r'(?!\w)', question, re.I)
                 if (location_context and mentions(question, location)
                         and not any(mentions(p, location) for p in plan['locations'])
@@ -745,12 +760,13 @@ class ResumeEngine:
             elif partial:
                 clarification='That name is ambiguous: '+', '.join(
                     f"{self.parents[c]['metadata']['candidate_name']} ({c})" for c in partial)
-        # A follow-up asking which people have a named skill narrows the previous results.
-        skill_followup = (plan['intent'] == 'details' and plan['reference'] != 'new'
+        # A follow-up can narrow the previous results by skill or location.
+        filter_followup = (plan['intent'] == 'details' and plan['reference'] != 'new'
                           and bool(re.match(r'\s*(?:which\s+(?:of|candidates?)|who)\b', q, re.I))
                           and not re.search(r'\bprojects?\b', q, re.I)
-                          and any(skill_mentions(q, skill) for skill in self.skills))
-        apply_criteria = (plan['intent'] in ('count','find','rank') or skill_followup
+                          and (any(skill_mentions(q, skill) for skill in self.skills)
+                               or bool(re.search(r'\b(?:are|live|based|located)\s+in\b|\bare\s+from\b', q, re.I))))
+        apply_criteria = (plan['intent'] in ('count','find','rank') or filter_followup
                           or bool(re.match(r'\s*(only|filter|narrow)\b', q,re.I)))
         extra = ExtraCriteria(skills=plan['skills'],excluded_skills=plan['excluded_skills'],
             preferred_skills=plan['preferred_skills'],locations=plan['locations'],unsupported=[])
@@ -1057,7 +1073,8 @@ class ResumeEngine:
             ranking.sort(key=lambda r:order[r['candidate_id']])
         # Apply the display limit only after ranking the complete eligible pool.
         unrestricted_followup = (plan['intent'] in ('details','compare') and plan['reference']!='new'
-                                   and not s['filters']['skill_groups'])
+                                   and not any(s['filters'][field] for field in
+                                               ('skill_groups', 'excluded_skills', 'locations')))
         limit = None if unrestricted_followup else plan['display_limit']
         selected=[r['candidate_id'] for r in (ranking if limit is None else ranking[:limit])]
         audit.update(displayed_candidates=len(selected),ranked_candidates=len(ranking),display_limit=limit,
@@ -1381,6 +1398,25 @@ def self_test():
         assert narrowed['filters'][field] == ([['FastAPI']] if field == 'skill_groups' else ['FastAPI'])
     e.skill_text['RESUME_0002'] = original_skills
     e.skills.remove('FastAPI')
+    previous_location = e.fields['RESUME_0002']['location']
+    e.fields['RESUME_0002']['location'] = 'Pune, Maharashtra'
+    e.locations.append('Pune, Maharashtra')
+    narrowed = {**base, 'question': 'Which of those candidates are in Pune?', 'memory': cohort}
+    narrowed.update(e._plan(narrowed))
+    narrowed.update(e._filter(narrowed))
+    assert narrowed['eligible'] == ['RESUME_0002']
+    e.fields['RESUME_0002']['location'] = previous_location
+    e.locations.remove('Pune, Maharashtra')
+    delhi_labels = ['Delhi NCR', 'New Delhi, Delhi, India']
+    e.locations.extend(delhi_labels)
+    for query, expected_locations in (
+        ('Python in Delhi', delhi_labels),
+        ('Python in New Delhi, Delhi, India', ['New Delhi, Delhi, India']),
+        ('Python in Delhi NCR', ['Delhi NCR']),
+    ):
+        assert e._interpret(query)['locations'] == expected_locations
+    for location in delhi_labels:
+        e.locations.remove(location)
     count={**base,'question':'how many candidates have more than 5 years of expirence?'}
     count.update(e._plan(count));count.update(e._filter(count));count.update(e._count(count))
     assert count['count_result']['confirmed']==1 and count['count_result']['uncertain']==256
