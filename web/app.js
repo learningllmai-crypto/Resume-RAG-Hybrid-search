@@ -133,11 +133,17 @@ async function send(event){
 async function refreshStatus(){
   try{
     const status=await api('/api/status');const ready=status.database&&status.model&&status.embedding;
-    $('serviceStatus').classList.toggle('offline',!ready);$('serviceStatus').replaceChildren(el('i'),document.createTextNode(ready?'Local model online':'Service needs attention'));
+    const chatStatus=status.chat_provider==='openai'?'Chat API available':'Local model online';
+    $('serviceStatus').classList.toggle('offline',!ready);$('serviceStatus').replaceChildren(el('i'),document.createTextNode(ready?chatStatus:'Service needs attention'));
     $('sidebarCount').textContent=status.resume_count.toLocaleString()+' resumes indexed';$('headerCount').textContent=status.resume_count.toLocaleString();
     $('welcomeCount').textContent=status.resume_count?status.resume_count.toLocaleString()+' resumes, ready to explore':'Add your first resume to get started';
     $('uploadLimit').textContent='PDF files · up to '+status.max_upload_mb+' MB each';
-    const missing=[];if(!status.database)missing.push('Start Docker and run docker compose up -d.');if(!status.model||!status.embedding)missing.push('Start Ollama with llama3.2:3b and nomic-embed-text installed.');
+    const missing=[];
+    if(!status.database)missing.push('Start Docker and run docker compose up -d.');
+    if(!status.embedding)missing.push('Start Ollama with '+status.embedding_model+' installed for embeddings.');
+    if(!status.model)missing.push(status.chat_provider==='openai'
+      ?'Check the chat API key, model and endpoint in .env.'
+      :'Start Ollama with '+status.model_name+' installed for chat.');
     $('serviceNotice').hidden=missing.length===0;$('serviceNotice').textContent=missing.join(' ');
   }catch(error){$('serviceStatus').classList.add('offline');$('serviceStatus').textContent='Server unavailable';$('serviceNotice').hidden=false;$('serviceNotice').textContent='The local server is unavailable. Start the app and refresh this page.';}
 }
